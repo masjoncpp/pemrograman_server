@@ -141,4 +141,21 @@ for course in Course.objects.prefetch_related("lessons"):
     for lesson in course.lessons.all():
         print(" -", lesson.title)
 print("Query count:", len(connection.queries))  # Menghasilkan 2 query
-```
+
+ ---                                                         
+                                                                
+    ## 5. Milestone Minggu 5 — Database Optimization & Benchmark
+                                                                
+    ### A. Membangkitkan Dataset Performa (Repeatable)          
+    Jalankan perintah berikut untuk membuat 10.000 data Course  
+    dan relasi LMS:                                             
+    ```bash                                                     
+    docker compose exec app python manage.py                    
+    generate_performance_data                                   
+    docker compose exec app python manage.py                    
+    generate_relationship_data                                  
+                                                                
+  ### B. Menjalankan Automated Benchmark                        
+                                                                
+  Jalankan benchmark performa untuk mengukur query count N+1 dan analisis indeks:                                                                                        
+    docker compose exec app python manage.py run_benchmark
