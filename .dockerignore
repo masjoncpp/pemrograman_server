@@ -1,0 +1,10 @@
+__pycache__
+*.pytest_cache
+*.pyo
+*.pyd 
+.venv
+venv
+.env
+.git
+.gitignore
+db.sqlite3
