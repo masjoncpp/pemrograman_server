@@ -1,26 +1,26 @@
-# Modul Praktikum 4 — Django Framework & ORM
-## Docker Development Environment + Core LMS Models
+# Simple LMS — Backend Development & Database Optimization
+**Pemrograman Sisi Server (A11.64707) · Milestone 4 & Milestone 5 (UTS)**
 
-Praktikum Pemrograman Sisi Server (A11.64707) yang mengimplementasikan Core LMS Models menggunakan Django Framework, Django ORM, PostgreSQL, dan Docker Compose.
+Repositori ini berisi implementasi **Simple LMS** (Learning Management System) berbasis Django, PostgreSQL, Docker Compose, serta eksperimen optimasi performa database, penanganan *N+1 Query*, dan *Database Indexing*.
 
 ---
 
-## 1. Domain LMS Models
+## 1. Domain Models & Relasi Database
 
-Project ini mengimplementasikan model domain Simple LMS:
-- **`User` (Custom User)**: Menggunakan `AbstractUser` dengan atribut `role` (`ADMIN`, `LECTURER`, `STUDENT`). Ditentukan sebelum initial migration auth.
-- **`Course`**: Model mata kuliah/kelas yang diampu oleh seorang `User` dengan role `LECTURER`. Memiliki foreign key `lecturer` dengan `on_delete=PROTECT` dan `limit_choices_to={"role": "LECTURER"}`.
-- **`Lesson`**: Materi di dalam course. Berelasi `ForeignKey(Course, on_delete=CASCADE, related_name="lessons")` dengan constraint unik `(course, order)`.
-- **`Enrollment`**: Model intermediate yang menghubungkan `Student` (`role="STUDENT"`) dengan `Course`, mencatat tanggal pendaftaran (`enrolled_at`), serta mencegah duplikasi dengan constraint unik `(student, course)`.
-- **`Assignment`**: Tugas pada sebuah course dengan field `deadline` dan `description`.
-- **`Submission`**: Pengumpulan tugas oleh student yang berelasi ke `Assignment` dan `User` (student), mencatat waktu pengumpulan (`submitted_at`) dan nilai (`grade`).
+Project ini mengimplementasikan model domain LMS secara lengkap:
+- **`User` (Custom User)**: Menggunakan `AbstractUser` dengan atribut `role` (`ADMIN`, `LECTURER`, `STUDENT`).
+- **`Course`**: Model mata kuliah yang diampu oleh `User` (role `LECTURER`). Memiliki indeks komposit pada `["is_active", "title"]` untuk optimasi pencarian data.
+- **`Lesson`**: Materi pembelajaran pada course dengan relasi `ForeignKey(Course)` dan constraint unik `(course, order)`.
+- **`Enrollment`**: Intermediate model pendaftaran mahasiswa (`Student`) ke `Course` dengan constraint unik `(student, course)`.
+- **`Assignment`**: Tugas pada course dengan atribut `title`, `description`, dan `deadline`.
+- **`Submission`**: Pengumpulan tugas oleh student yang mencatat konten jawaban, waktu pengumpulan (`submitted_at`), dan nilai (`grade`).
 
 ---
 
 ## 2. Struktur Project
 
 ```text
-week4/
+.
 ├── compose.yaml
 ├── Dockerfile
 ├── requirements.txt
@@ -28,138 +28,156 @@ week4/
 ├── .gitignore
 ├── .dockerignore
 ├── manage.py
+├── README.md
 ├── config/
 │   ├── __init__.py
 │   ├── settings.py
 │   ├── urls.py
 │   └── wsgi.py
 ├── users/
-│   ├── __init__.py
-│   ├── admin.py
 │   ├── models.py
+│   ├── admin.py
 │   ├── tests.py
 │   └── migrations/
-│       ├── __init__.py
 │       └── 0001_initial.py
 └── catalog/
-    ├── __init__.py
-    ├── admin.py
     ├── models.py
+    ├── admin.py
     ├── tests.py
     ├── management/
     │   └── commands/
-    │       └── seed_demo.py
+    │       ├── seed_demo.py
+    │       ├── generate_performance_data.py
+    │       ├── generate_relationship_data.py
+    │       └── run_benchmark.py
     └── migrations/
-        ├── __init__.py
         ├── 0001_initial.py
         ├── 0002_lesson.py
-        └── 0003_assignment_submission_enrollment.py
+        ├── 0003_assignment_submission_enrollment.py
+        └── 0004_course_catalog_cou_is_acti_d7f8f8_idx.py
 ```
 
 ---
 
 ## 3. Langkah Menjalankan Project
 
-### A. Build dan Jalankan Container
+### A. Build dan Jalankan Container Docker
 Jalankan service container aplikasi Django dan database PostgreSQL:
 ```bash
 docker compose up -d --build
 ```
 
-Pastikan container berjalan:
+Pastikan seluruh container berjalan normal:
 ```bash
 docker compose ps
 ```
 
 ### B. Menjalankan Migrasi Database
-Terapkan semua migration ke database PostgreSQL:
+Terapkan semua file migrasi ke PostgreSQL:
 ```bash
 docker compose exec app python manage.py migrate
 ```
 
-### C. Seed Sample Data (Idempotent)
-Jalankan command management untuk mengisi database dengan data awal sesuai modul:
+### C. Seed Initial Sample Data (Data Demo)
+Jalankan command management untuk mengisi database dengan data demo awal:
 ```bash
 docker compose exec app python manage.py seed_demo
 ```
-
-Data yang dibuat:
-- **Admin**: `admin` (Role: ADMIN, is_staff=True, is_superuser=True)
-- **Dosen / Lecturers**: `suprayogi`, `agus`, `ayu`, `bagus`, `heru` (Role: LECTURER)
-- **Student**: `fauzan` (Role: STUDENT)
-- **Courses**: `PSS01` s/d `PSS05` (*Pemrograman Sisi Server*, *Django Framework*, *Django ORM*, *REST API*, *Docker*)
-- **Lessons**: 3 materi pelajaran terurut pada `PSS01`
-- **Enrollment**: `fauzan` terdaftar pada `PSS01`
-- **Assignments**: *Tugas Django ORM* dan *Tugas REST API* pada `PSS01`
-- **Submissions**: Jawaban dari student `fauzan` dengan nilai `87.50` dan `90.00`
-
-### D. Mengakses Django Admin
-Buka browser pada URL:
-[http://localhost:8000/admin/](http://localhost:8000/admin/)
-
-Login menggunakan kredensial:
-- **Username**: `admin`
-- **Password**: `admin123`
-
-### E. Menjalankan Unit Tests
-Jalankan pengujian unit test model dan relasi domain:
-```bash
-docker compose exec app python manage.py test
-```
-
-Semua pengujian mencakup:
-1. Validasi Custom User model dan role default `STUDENT`.
-2. Validasi Course model, relasi Dosen, dan string representation.
-3. Validasi Lesson ordering, unique constraint `(course, order)`, dan reverse relationship.
-4. Validasi Intermediate model Enrollment dan unique constraint `(student, course)`.
-5. Validasi Assignment dan Submission beserta foreign key relasinya.
-6. Validasi optimasi query traversal (`select_related` dan `prefetch_related`).
+*Data yang dibuat:* 1 Admin, 5 Dosen (`suprayogi`, `agus`, `ayu`, `bagus`, `heru`), 1 Mahasiswa (`fauzan`), 5 Course (`PSS01`–`PSS05`), Lesson, Enrollment, Assignment, dan Submission.
 
 ---
 
-## 4. Query Traversal & Optimasi Query (Django Shell)
+## 4. Dataset Performa (Milestone 5)
 
-Untuk mencoba penelusuran relasi dan optimasi query N+1:
+Untuk pengujian performa query dalam skala besar ($\ge 10.000$ records), jalankan generator dataset berikut:
+
+### A. Generate 10.000 Course Performa
+Command ini membuat 10.000 data Course berkode `PERF00000` s/d `PERF09999` secara efisien dan idempotent menggunakan `bulk_create(batch_size=500)`:
+```bash
+docker compose exec app python manage.py generate_performance_data
+```
+
+### B. Generate Data Relasi LMS
+Command ini membuat dataset relasi yang mencakup 5 Dosen simulasi, 50 Mahasiswa simulasi, 1.000 Enrollment, 500 Lesson, 200 Assignment, dan 1.000 Submission:
+```bash
+docker compose exec app python manage.py generate_relationship_data
+```
+
+---
+
+## 5. Menjalankan Benchmark & Pengujian Optimasi Query
+
+### A. Cara Cepat: Automated Benchmark Command
+Jalankan command berikut untuk mengeksekusi seluruh pengujian performa secara otomatis:
+```bash
+docker compose exec app python manage.py run_benchmark
+```
+Command ini akan menampilkan metrik sebelum vs sesudah optimasi, efisiensi query, dan query plan `EXPLAIN`.
+
+---
+
+### B. Cara Manual via Django Shell
+Masuk ke Django Shell interaktif:
 ```bash
 docker compose exec app python manage.py shell
 ```
 
+#### 1. Optimasi N+1: Course + Lecturer (`select_related`)
 ```python
+import time
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from catalog.models import Course
-from django.db import connection, reset_queries
 
-# Optimasi 1: One-to-One / ForeignKey traversal menggunakan select_related
-reset_queries()
-for course in Course.objects.select_related("lecturer"):
-    print(course.code, "Dosen:", course.lecturer.username)
-print("Query count:", len(connection.queries))  # Menghasilkan 1 query
+# BEFORE: Query biasa (menghasilkan 101 query)
+with CaptureQueriesContext(connection) as ctx:
+    courses = Course.objects.filter(code__startswith='PERF').order_by('code')[:100]
+    result = [(c.title, c.lecturer.username) for c in courses]
+print("Query BEFORE:", len(ctx.captured_queries))
 
-# Optimasi 2: Reverse ForeignKey / One-to-Many traversal menggunakan prefetch_related
-reset_queries()
-for course in Course.objects.prefetch_related("lessons"):
-    print(course.code)
-    for lesson in course.lessons.all():
-        print(" -", lesson.title)
-print("Query count:", len(connection.queries))  # Menghasilkan 2 query
+# AFTER: Menggunakan select_related (menghasilkan 1 query via SQL JOIN)
+with CaptureQueriesContext(connection) as ctx:
+    courses = Course.objects.filter(code__startswith='PERF').order_by('code').select_related('lecturer')[:100]
+    result = [(c.title, c.lecturer.username) for c in courses]
+print("Query AFTER:", len(ctx.captured_queries))
+```
+
+#### 2. Optimasi N+1: Course + Lesson (`prefetch_related`)
+```python
+# BEFORE: Query biasa (menghasilkan 51 query)
+with CaptureQueriesContext(connection) as ctx:
+    titles = [[l.title for l in c.lessons.all()] for c in Course.objects.filter(code__startswith='PERF').order_by('code')[:50]]
+print("Query BEFORE:", len(ctx.captured_queries))
+
+# AFTER: Menggunakan prefetch_related (menghasilkan 2 query)
+with CaptureQueriesContext(connection) as ctx:
+    titles = [[l.title for l in c.lessons.all()] for c in Course.objects.filter(code__startswith='PERF').order_by('code').prefetch_related('lessons')[:50]]
+print("Query AFTER:", len(ctx.captured_queries))
+```
+
+#### 3. Database Indexing & EXPLAIN Analysis
+```python
+qs = Course.objects.filter(is_active=True, title='Performance Course 5000')
+print(qs.explain(analyze=True))
+# Hasil: Index Scan menggunakan catalog_cou_is_acti_d7f8f8_idx
 ```
 
 ---
 
-## 5. Milestone Minggu 5 — Database Optimization & Benchmark
+## 6. Ringkasan Hasil Benchmark (Before vs After)
 
-### A. Membangkitkan Dataset Performa (Repeatable)
+| Percobaan | Metrik BEFORE | Metrik AFTER | Improvement | Kesimpulan |
+|---|---|---|---|---|
+| **Course + Lecturer** | 101 query (0.2306s) | 1 query (0.0164s) | **92.89%** | Masalah N+1 terselesaikan via SQL JOIN (`select_related`) |
+| **Course + Lesson** | 51 query | 2 query | **96.08%** query reduction | Masalah N+1 terselesaikan via 2-query batching (`prefetch_related`) |
+| **Database Index** | `Seq Scan` (1.738ms, cost 239.06) | `Index Scan` (0.079ms, cost 8.30) | **95.45%** waktu | Pemindaian berpindah ke struktur B-Tree index komposit |
 
-Jalankan perintah berikut untuk membuat 10.000 data Course dan relasi LMS:
+---
 
+## 7. Menjalankan Automated Unit Tests
+
+Jalankan test suite untuk memastikan seluruh logika bisnis, validasi model, dan relasi tetap berfungsi dengan baik:
 ```bash
-docker compose exec app python manage.py generate_performance_data
-docker compose exec app python manage.py generate_relationship_data
+docker compose exec app python manage.py test
 ```
-
-### B. Menjalankan Automated Benchmark
-
-Jalankan benchmark performa untuk mengukur query count N+1 dan analisis indeks:
-
-```bash
-docker compose exec app python manage.py run_benchmark
-```
+*Hasil:* 11 test lulus (**OK**) tanpa ada error/regression.
