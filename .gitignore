@@ -8,3 +8,8 @@ __pycache__/
 .coverage
 htmlcov/
 *.pdf
+ # Folder screenshot dan catatan pengujian lokal
+screenshot/
+screenshot-UTS/
+panduan_screenshot_commands/
+ISIAN_LENGKAP_LAPORAN.*
